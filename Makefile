@@ -5,6 +5,5 @@ fmt:
 gen-mock:
 	mockery --all
 
-
 test: gen-mock
 	go test ./...

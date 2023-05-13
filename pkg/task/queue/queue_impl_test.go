@@ -8,38 +8,41 @@ import (
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+
 	"github.com/toysmars/distlib-go/pkg/task"
 )
 
 type queueTestSetup struct {
-	ctx           context.Context
-	option        Option
-	queue         *queueImpl
-	mockOp        *MockOperator
-	mockOpFactory *MockOperatorFactory
+	ctx    context.Context
+	option Option
+	queue  *queueImpl
+	mockOp *MockOperator
+}
+
+var testTaskGroup = task.Group{
+	Namespace: "unit-test",
+	Name:      "unit-test",
 }
 
 func createQueueTestSetup(t *testing.T, kind Kind) queueTestSetup {
 	t.Helper()
 
-	factory := NewMockOperatorFactory(t)
 	op := NewMockOperator(t)
 	option := Option{
+		TaskGroup:    testTaskGroup,
 		Kind:         kind,
-		Factory:      factory,
 		PollInterval: 10 * time.Millisecond,
+		Operator:     op,
 	}
 
-	factory.On("CreateOperator", option).Return(op)
 	queue, err := New(option)
 	assert.NoError(t, err)
 
 	return queueTestSetup{
-		ctx:           context.Background(),
-		option:        option,
-		mockOp:        op,
-		mockOpFactory: factory,
-		queue:         queue.(*queueImpl),
+		ctx:    context.Background(),
+		option: option,
+		mockOp: op,
+		queue:  queue.(*queueImpl),
 	}
 }
 
@@ -77,11 +80,12 @@ func TestQueue_Pop(t *testing.T) {
 	testItem := &Item{
 		Task: &task.Task{
 			Message: "my test task",
+			Group:   testTaskGroup,
 		},
 	}
 
 	testWithExpectedError := func(t *testing.T, ts *queueTestSetup, expectedErr error) {
-		ts.mockOp.On("Pop", ts.ctx).Return(nil, expectedErr)
+		ts.mockOp.On("Pop", ts.ctx, testTaskGroup).Return(nil, expectedErr)
 
 		item, err := ts.queue.Pop(ts.ctx)
 
@@ -92,7 +96,7 @@ func TestQueue_Pop(t *testing.T) {
 
 	t.Run("test queue.Pop() success", func(t *testing.T) {
 		ts := createQueueTestSetup(t, Fifo)
-		ts.mockOp.On("Pop", ts.ctx).Return(testItem, nil)
+		ts.mockOp.On("Pop", ts.ctx, testTaskGroup).Return(testItem, nil)
 
 		item, err := ts.queue.Pop(ts.ctx)
 
@@ -103,12 +107,51 @@ func TestQueue_Pop(t *testing.T) {
 		ts := createQueueTestSetup(t, Fifo)
 		testWithExpectedError(t, &ts, ErrNotFound)
 	})
-	t.Run("test queue.Pop() fail with ErrNotAvailable", func(t *testing.T) {
+	t.Run("test queue.Pop() fail with ErrInternal", func(t *testing.T) {
 		ts := createQueueTestSetup(t, Fifo)
+		testWithExpectedError(t, &ts, ErrInternal)
+	})
+}
+
+func TestQueue_Pop_WithScheduled(t *testing.T) {
+	t.Parallel()
+
+	testItem := &Item{
+		Task: &task.Task{
+			Message: "my test task",
+			Group:   testTaskGroup,
+		},
+	}
+
+	testWithExpectedError := func(t *testing.T, ts *queueTestSetup, expectedErr error) {
+		ts.mockOp.On("PopScheduled", ts.ctx, testTaskGroup).Return(nil, expectedErr)
+
+		item, err := ts.queue.Pop(ts.ctx)
+
+		assert.Error(t, err)
+		assert.True(t, errors.Is(err, expectedErr))
+		assert.Nil(t, item)
+	}
+
+	t.Run("test queue.Pop() success", func(t *testing.T) {
+		ts := createQueueTestSetup(t, Scheduled)
+		ts.mockOp.On("PopScheduled", ts.ctx, testTaskGroup).Return(testItem, nil)
+
+		item, err := ts.queue.Pop(ts.ctx)
+
+		assert.NoError(t, err)
+		assert.Equal(t, testItem.Task, item.Task)
+	})
+	t.Run("test queue.Pop() fail with ErrNotFound", func(t *testing.T) {
+		ts := createQueueTestSetup(t, Scheduled)
+		testWithExpectedError(t, &ts, ErrNotFound)
+	})
+	t.Run("test queue.Pop() fail with ErrNotAvailable", func(t *testing.T) {
+		ts := createQueueTestSetup(t, Scheduled)
 		testWithExpectedError(t, &ts, ErrNotAvailable)
 	})
 	t.Run("test queue.Pop() fail with ErrInternal", func(t *testing.T) {
-		ts := createQueueTestSetup(t, Fifo)
+		ts := createQueueTestSetup(t, Scheduled)
 		testWithExpectedError(t, &ts, ErrInternal)
 	})
 }
@@ -119,11 +162,12 @@ func TestQueue_TryPop(t *testing.T) {
 	testItem := &Item{
 		Task: &task.Task{
 			Message: "my test task",
+			Group:   testTaskGroup,
 		},
 	}
 
 	testWithExpectedError := func(t *testing.T, ts *queueTestSetup, expectedErr error) {
-		ts.mockOp.On("Pop", ts.ctx).Return(nil, expectedErr)
+		ts.mockOp.On("Pop", ts.ctx, testTaskGroup).Return(nil, expectedErr)
 
 		item, err := ts.queue.TryPop(ts.ctx, 100*time.Millisecond)
 
@@ -143,7 +187,7 @@ func TestQueue_TryPop(t *testing.T) {
 
 	t.Run("test queue.TryPop() success", func(t *testing.T) {
 		ts := createQueueTestSetup(t, Fifo)
-		ts.mockOp.On("Pop", ts.ctx).Return(testItem, nil)
+		ts.mockOp.On("Pop", ts.ctx, testTaskGroup).Return(testItem, nil)
 
 		item, err := ts.queue.TryPop(ts.ctx, 100*time.Millisecond)
 
@@ -154,15 +198,15 @@ func TestQueue_TryPop(t *testing.T) {
 	t.Run("test queue.TryPop() success with wating", func(t *testing.T) {
 		ts := createQueueTestSetup(t, Fifo)
 		called := 0
-		ts.mockOp.On("Pop", ts.ctx).Return(
-			func(ctx context.Context) *Item {
+		ts.mockOp.On("Pop", ts.ctx, testTaskGroup).Return(
+			func(ctx context.Context, group task.Group) *Item {
 				called++
 				if called == 5 {
 					return testItem
 				}
 				return nil
 			},
-			func(ctx context.Context) error {
+			func(ctx context.Context, group task.Group) error {
 				if called < 5 {
 					return ErrNotAvailable
 				}

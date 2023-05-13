@@ -35,8 +35,8 @@ type Option struct {
 	Kind Kind
 	// PollInterval is the desired wait period between consecutive `Pop()` function calls for available item polling.
 	PollInterval time.Duration
-	// Factory is the Operator factory.
-	Factory OperatorFactory
+	// Operator is the QueueOperator.
+	Operator Operator
 }
 
 // Item represents an item in the queue.
@@ -59,29 +59,28 @@ type Queue interface {
 	Push(ctx context.Context, task *task.Task) (*Item, error)
 
 	// Pop pops the Item object with the highest priority.
-	//  it returns ErrNoItem when there's no items in the queue.
+	//  it returns ErrNotFound when there's no items in the queue.
 	//  it returns ErrNotAvailable when there's no available items in the queue(the scheduled time not yet reached).
 	Pop(ctx context.Context) (*Item, error)
 
 	// TryPop pops the Item object with the highest priority.
 	// This function can wait up to `timeout` until there's an item become available.
-	//  it returns ErrNoItem when there's no items in the queue.
+	//  it returns ErrNotFound when there's no items in the queue.
 	//  it returns ErrNotAvailable when there's no available items in the queue(the scheduled time not yet reached).
 	TryPop(ctx context.Context, timeout time.Duration) (*Item, error)
 }
 
-// OperatorFactory is the factory for Operator.
-type OperatorFactory interface {
-	CreateOperator(option Option) Operator
-}
-
-// Operator is the interface should be implmented by the underlying queue implementation.
+// Operator is the interface that should be implmented by the underlying queue implementation.
 type Operator interface {
 	// Push pushes a task item into the queue.
 	Push(ctx context.Context, item *Item) error
 
 	// Pop pops the Item object with the highest priority.
-	//  it returns ErrNoItem when there's no items in the queue.
+	//  it returns ErrNotFound when there's no items in the queue.
+	Pop(ctx context.Context, group task.Group) (*Item, error)
+
+	// PopScheduled pops an Item object that met the schedule.
+	//  it returns ErrNotFound when there's no items in the queue.
 	//  it returns ErrNotAvailable when there's no available items in the queue(the scheduled time not yet reached).
-	Pop(ctx context.Context) (*Item, error)
+	PopScheduled(ctx context.Context, group task.Group) (*Item, error)
 }

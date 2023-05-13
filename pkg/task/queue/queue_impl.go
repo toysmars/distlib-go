@@ -17,12 +17,12 @@ func New(option Option) (Queue, error) {
 	if option.PollInterval <= 0 {
 		return nil, errors.Wrap(ErrInit, "invalid PollInternal")
 	}
-	if option.Factory == nil {
-		return nil, errors.Wrap(ErrInit, "Factory must be supplied")
+	if option.Operator == nil {
+		return nil, errors.Wrap(ErrInit, "Operator must be supplied")
 	}
 	return &queueImpl{
 		option: option,
-		op:     option.Factory.CreateOperator(option),
+		op:     option.Operator,
 	}, nil
 }
 
@@ -42,13 +42,13 @@ func (q *queueImpl) Push(ctx context.Context, task *task.Task) (*Item, error) {
 }
 
 func (q *queueImpl) Pop(ctx context.Context) (*Item, error) {
-	return q.op.Pop(ctx)
+	return q.doPop(ctx)
 }
 
 func (q *queueImpl) TryPop(ctx context.Context, timeout time.Duration) (item *Item, err error) {
 	startsAt := time.Now()
 	for time.Since(startsAt) < timeout {
-		item, err = q.op.Pop(ctx)
+		item, err = q.doPop(ctx)
 		if err == nil {
 			return item, nil
 		}
@@ -82,4 +82,11 @@ func (q *queueImpl) createItem(task *task.Task) *Item {
 		Score:    getScore(),
 		QueuedAt: time.Now(),
 	}
+}
+
+func (q *queueImpl) doPop(ctx context.Context) (*Item, error) {
+	if q.option.Kind == Scheduled {
+		return q.op.PopScheduled(ctx, q.option.TaskGroup)
+	}
+	return q.op.Pop(ctx, q.option.TaskGroup)
 }
