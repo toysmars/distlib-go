@@ -21,13 +21,13 @@ func (op *redisOp) Push(ctx context.Context, item *queue.Item) error {
 	}
 
 	// Add the item value to the item set.
-	err = op.client.Set(ctx, op.getQueueItemKey(item.Task.Group, item.Id), string(buf), 0).Err()
+	err = op.cmdable.Set(ctx, op.getQueueItemKey(item.Task.Group, item.Id), string(buf), 0).Err()
 	if err != nil {
 		return errors.Wrap(queue.ErrInternal, err.Error())
 	}
 
 	// Add the item to the sorted set.
-	err = op.client.ZAdd(ctx, op.getQueueKey(item.Task.Group), redis.Z{
+	err = op.cmdable.ZAdd(ctx, op.getQueueKey(item.Task.Group), redis.Z{
 		Score:  float64(item.Score),
 		Member: item.Id,
 	}).Err()
@@ -40,7 +40,7 @@ func (op *redisOp) Push(ctx context.Context, item *queue.Item) error {
 
 func (op *redisOp) Pop(ctx context.Context, group task.Group) (*queue.Item, error) {
 	// Pop the item with highest priority from the sorted set.
-	res, err := op.client.ZPopMin(ctx, op.getQueueKey(group), 1).Result()
+	res, err := op.cmdable.ZPopMin(ctx, op.getQueueKey(group), 1).Result()
 	if err != nil {
 		return nil, errors.Wrap(queue.ErrInternal, err.Error())
 	}
@@ -54,7 +54,7 @@ func (op *redisOp) Pop(ctx context.Context, group task.Group) (*queue.Item, erro
 
 func (op *redisOp) PopScheduled(ctx context.Context, group task.Group) (*queue.Item, error) {
 	for {
-		cnt, err := op.client.ZCount(ctx, op.getQueueKey(group), "-inf", "+inf").Result()
+		cnt, err := op.cmdable.ZCount(ctx, op.getQueueKey(group), "-inf", "+inf").Result()
 		if err != nil {
 			return nil, errors.Wrap(queue.ErrInternal, err.Error())
 		}
@@ -62,7 +62,7 @@ func (op *redisOp) PopScheduled(ctx context.Context, group task.Group) (*queue.I
 			return nil, queue.ErrNotFound
 		}
 		// Get the item that passed the scheduled time.
-		ids, err := op.client.ZRangeByScore(ctx, op.getQueueKey(group), &redis.ZRangeBy{
+		ids, err := op.cmdable.ZRangeByScore(ctx, op.getQueueKey(group), &redis.ZRangeBy{
 			Min:    "-inf",
 			Max:    strconv.FormatInt(time.Now().UnixMilli(), 10),
 			Offset: 0,
@@ -87,7 +87,7 @@ func (op *redisOp) PopScheduled(ctx context.Context, group task.Group) (*queue.I
 
 func (op *redisOp) fetchAndRemove(ctx context.Context, group task.Group, id string, mustRemove bool) (*queue.Item, error) {
 	// Get the item from the item set.
-	buf, err := op.client.Get(ctx, op.getQueueItemKey(group, id)).Result()
+	buf, err := op.cmdable.Get(ctx, op.getQueueItemKey(group, id)).Result()
 	if err != nil {
 		return nil, errors.Wrap(queue.ErrInternal, err.Error())
 	}
@@ -100,7 +100,7 @@ func (op *redisOp) fetchAndRemove(ctx context.Context, group task.Group, id stri
 	}
 
 	// Remove the item from the sorted set.
-	removed, err := op.client.ZRem(ctx, op.getQueueKey(group), item.Id).Result()
+	removed, err := op.cmdable.ZRem(ctx, op.getQueueKey(group), item.Id).Result()
 	if err != nil {
 		return nil, errors.Wrap(queue.ErrInternal, err.Error())
 	}
@@ -109,7 +109,7 @@ func (op *redisOp) fetchAndRemove(ctx context.Context, group task.Group, id stri
 	}
 
 	// Remove the item from the item set.
-	removed, err = op.client.Del(ctx, op.getQueueItemKey(group, item.Id)).Result()
+	removed, err = op.cmdable.Del(ctx, op.getQueueItemKey(group, item.Id)).Result()
 	if err != nil {
 		return nil, errors.Wrap(queue.ErrInternal, err.Error())
 	}

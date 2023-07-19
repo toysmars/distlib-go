@@ -1,3 +1,6 @@
+build:
+	go install -v ./...
+
 fmt:
 	gofmt -w -s ./
 	goimports -w  -local github.com/toysmars/distlib-go ./
