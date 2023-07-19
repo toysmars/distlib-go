@@ -21,7 +21,7 @@ func (op *redisOp) RegisterHealthStatus(ctx context.Context, status sd.HealthSta
 	}
 
 	// Add the health status to the registry map.
-	err = op.client.HSet(ctx, key, status.Identity.Instance, string(buf)).Err()
+	err = op.cmdable.HSet(ctx, key, status.Identity.Instance, string(buf)).Err()
 	if err != nil {
 		return errors.Wrap(sd.ErrInternal, err.Error())
 	}
@@ -34,7 +34,7 @@ func (op *redisOp) ListHealthStatus(ctx context.Context, identity sd.Identity) (
 	key := getHealthStatusRegistryKey(identity)
 
 	// Get the members in the registry map.
-	statusMap, err := op.client.HGetAll(ctx, key).Result()
+	statusMap, err := op.cmdable.HGetAll(ctx, key).Result()
 	if err != nil {
 		return nil, errors.Wrap(sd.ErrInternal, err.Error())
 	}
@@ -58,7 +58,7 @@ func (op *redisOp) DeregisterHealthStatus(ctx context.Context, identity sd.Ident
 	key := getHealthStatusRegistryKey(identity)
 
 	// Delete the health status from the registry map.
-	err := op.client.HDel(ctx, key, identity.Instance).Err()
+	err := op.cmdable.HDel(ctx, key, identity.Instance).Err()
 	if err != nil {
 		return errors.Wrap(sd.ErrInternal, err.Error())
 	}

@@ -2,12 +2,12 @@ package redisop
 
 import "github.com/redis/go-redis/v9"
 
-func NewRedisOperator(client *redis.Client) Operator {
+func NewRedisOperator(client redis.Cmdable) Operator {
 	return &redisOp{
-		client: client,
+		cmdable: client,
 	}
 }
 
 type redisOp struct {
-	client *redis.Client
+	cmdable redis.Cmdable
 }
