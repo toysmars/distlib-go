@@ -9,6 +9,7 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/redis/go-redis/v9"
+
 	"github.com/toysmars/distlib-go/pkg/task"
 	"github.com/toysmars/distlib-go/pkg/task/queue"
 )

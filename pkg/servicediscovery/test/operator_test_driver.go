@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+
 	sd "github.com/toysmars/distlib-go/pkg/servicediscovery"
 )
 
