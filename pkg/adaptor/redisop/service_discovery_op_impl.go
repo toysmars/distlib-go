@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/pkg/errors"
+
 	sd "github.com/toysmars/distlib-go/pkg/servicediscovery"
 )
 

@@ -4,7 +4,7 @@ import "time"
 
 // Task represent a task to be done.
 type Task struct {
-	Message interface{}
+	Message string
 	Group   Group
 	Option  Option
 }
